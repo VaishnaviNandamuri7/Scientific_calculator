@@ -1,0 +1,6 @@
+CALC_PRO/
+*.jou
+*.log
+*.str
+.Xil/
+*.backup.*
