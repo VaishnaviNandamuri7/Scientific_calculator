@@ -47,7 +47,7 @@ proc checkRequiredFiles { origin_dir} {
   return $status
 }
 # Set the reference directory for source file relative paths (by default the value is script directory path)
-set origin_dir "."
+set origin_dir [file normalize [file dirname [info script]]]
 
 # Use origin directory path location variable, if specified in the tcl shell
 if { [info exists ::origin_dir_loc] } {
@@ -125,7 +125,7 @@ if { $validate_required } {
 }
 
 # Create project
-create_project ${_xil_proj_name_} ./${_xil_proj_name_} -part xc7a100tcsg324-1
+create_project ${_xil_proj_name_} $origin_dir/${_xil_proj_name_} -part xc7a100tcsg324-1 -force
 
 # Set the directory path for the new project
 set proj_dir [get_property directory [current_project]]
@@ -156,11 +156,7 @@ if {[string equal [get_filesets -quiet sources_1] ""]} {
 
 # Set 'sources_1' fileset object
 set obj [get_filesets sources_1]
-set files [list \
- [file normalize "${origin_dir}/../RTL/half_adder.v"] \
-]
-add_files -norecurse -fileset $obj $files
-
+add_files -norecurse -fileset sources_1 [glob -nocomplain $origin_dir/../RTL/*.v]
 # Set 'sources_1' fileset file properties for remote files
 # None
 
@@ -193,7 +189,8 @@ if {[string equal [get_filesets -quiet sim_1] ""]} {
 
 # Set 'sim_1' fileset object
 set obj [get_filesets sim_1]
-# Empty (no sources present)
+set tb [glob -nocomplain $origin_dir/../TB/*.v]
+if {$tb ne ""} { add_files -norecurse -fileset sim_1 $tb }
 
 # Set 'sim_1' fileset properties
 set obj [get_filesets sim_1]
