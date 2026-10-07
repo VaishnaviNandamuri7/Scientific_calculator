@@ -191,11 +191,13 @@ if {[string equal [get_filesets -quiet sim_1] ""]} {
 set obj [get_filesets sim_1]
 set tb [glob -nocomplain $origin_dir/../TB/*.v]
 if {$tb ne ""} { add_files -norecurse -fileset sim_1 $tb }
+set hex [glob -nocomplain $origin_dir/../TB/*.hex]
+if {$hex ne ""} { add_files -norecurse -fileset sim_1 $hex }
 
 # Set 'sim_1' fileset properties
 set obj [get_filesets sim_1]
 set_property -name "sim_wrapper_top" -value "1" -objects $obj
-set_property -name "top" -value "half_adder" -objects $obj
+set_property -name "top" -value "IMU_tb" -objects $obj
 set_property -name "top_lib" -value "xil_defaultlib" -objects $obj
 
 # Set 'utils_1' fileset object
