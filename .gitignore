@@ -1,6 +1,21 @@
+# Vivado generated
+Scripts/CALC_*/
 CALC_PRO/
+*.cache/
+*.hw/
+*.runs/
+*.sim/
+*.gen/
+*.ip_user_files/
+.Xil/
+Scripts/.Xil/
 *.jou
 *.log
 *.str
-.Xil/
-*.backup.*
+*.wdb
+xsim.dir/
+webtalk*
+
+# OS / editor
+Thumbs.db
+.vscode/
