@@ -20,7 +20,7 @@
 //////////////////////////////////////////////////////////////////////////////////
 
 
-module IMU#(
+module IMU#(//instruction memory unit
     parameter PROGRAM_FILE = "program.hex"
 )(
     input clk,
