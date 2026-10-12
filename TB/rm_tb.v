@@ -1,22 +1,22 @@
 `timescale 1ns / 1ps
 //////////////////////////////////////////////////////////////////////////////////
-// Company: 
-// Engineer: 
-// 
+// Company:
+// Engineer:
+//
 // Create Date: 11.10.2026 22:47:09
-// Design Name: 
+// Design Name:
 // Module Name: rm_tb
-// Project Name: 
-// Target Devices: 
-// Tool Versions: 
-// Description: 
-// 
-// Dependencies: 
-// 
+// Project Name:
+// Target Devices:
+// Tool Versions:
+// Description:
+//
+// Dependencies:
+//
 // Revision:
 // Revision 0.01 - File Created
 // Additional Comments:
-// 
+//
 //////////////////////////////////////////////////////////////////////////////////
 
 
@@ -24,118 +24,84 @@
 
 module register_file_tb;
 
-    reg clk;
-    reg reset;
-    reg reg_write;
-    reg [4:0] rs1;
-    reg [4:0] rs2;
-    reg [4:0] rd;
-    reg [31:0] write_data_dm;
-    reg lb;
-    reg lui_control;
-    reg [31:0] lui_imm_val;
-    reg [31:0] return_address;
-    reg jump;
-    reg sw;
-
-    wire [31:0] rs1_data;
-    wire [31:0] rs2_data;
-    wire [4:0] read_data_addr_dm;
-    wire [31:0] data_out_2_dm;
+    reg clk = 0;
+    reg reset = 1;
+    reg reg_write = 0;
+    reg [4:0] rs1 = 0, rs2 = 0, rd = 0;
+    reg [31:0] write_data = 0;
+    wire [31:0] rs1_data, rs2_data;
+    integer errors = 0;
 
     register_file uut (
-        .clk(clk),
-        .reset(reset),
-        .reg_write(reg_write),
-        .rs1(rs1),
-        .rs2(rs2),
-        .rd(rd),
-        .write_data_dm(write_data_dm),
-        .lb(lb),
-        .lui_control(lui_control),
-        .lui_imm_val(lui_imm_val),
-        .return_address(return_address),
-        .jump(jump),
-        .rs1_data(rs1_data),
-        .rs2_data(rs2_data),
-        .read_data_addr_dm(read_data_addr_dm),
-        .data_out_2_dm(data_out_2_dm),
-        .sw(sw)
+        .clk(clk), .reset(reset), .reg_write(reg_write),
+        .rs1(rs1), .rs2(rs2), .rd(rd),
+        .write_data(write_data),
+        .rs1_data(rs1_data), .rs2_data(rs2_data)
     );
 
     always #5 clk = ~clk;
 
+    // drive inputs on the falling edge so they never race with the rising edge
+    task write_reg;
+        input [4:0]  r;
+        input [31:0] data;
+        input        en;
+        begin
+            @(negedge clk);
+            rd = r; write_data = data; reg_write = en;
+            @(negedge clk);
+            reg_write = 0;
+        end
+    endtask
+
+    // read both ports and compare
+    task read_check;
+        input [8*16-1:0] name;
+        input [4:0]  r1;
+        input [4:0]  r2;
+        input [31:0] exp1;
+        input [31:0] exp2;
+        begin
+            rs1 = r1; rs2 = r2;
+            #1;
+            if (rs1_data !== exp1 || rs2_data !== exp2) begin
+                $display("FAIL %0s: rs1_data=%h (exp %h)  rs2_data=%h (exp %h)",
+                         name, rs1_data, exp1, rs2_data, exp2);
+                errors = errors + 1;
+            end else
+                $display("pass %0s", name);
+        end
+    endtask
+
     initial begin
-        clk = 0;
+        #12 reset = 0;
+
+        read_check("after reset", 5'd5, 5'd10, 32'd0, 32'd0);
+
+        write_reg(5'd5, 32'hAAAABBBB, 1);
+        read_check("write x5", 5'd5, 5'd5, 32'hAAAABBBB, 32'hAAAABBBB);
+
+        write_reg(5'd10, 32'hFFFF0000, 1);
+        read_check("two ports", 5'd5, 5'd10, 32'hAAAABBBB, 32'hFFFF0000);
+
+        write_reg(5'd0, 32'hDEADBEEF, 1);
+        read_check("x0 stays zero", 5'd0, 5'd0, 32'd0, 32'd0);
+
+        write_reg(5'd7, 32'h00001234, 0);
+        read_check("no write enable", 5'd7, 5'd5, 32'd0, 32'hAAAABBBB);
+
+        write_reg(5'd5, 32'h00000042, 1);
+        read_check("overwrite x5", 5'd5, 5'd10, 32'h00000042, 32'hFFFF0000);
+
         reset = 1;
-        reg_write = 0;
-        rs1 = 0;
-        rs2 = 0;
-        rd = 0;
-        write_data_dm = 0;
-        lb = 0;
-        lui_control = 0;
-        lui_imm_val = 0;
-        return_address = 0;
-        jump = 0;
-        sw = 0;
+        @(negedge clk);
+        @(negedge clk);
+        reset = 0;
+        read_check("reset clears", 5'd5, 5'd10, 32'd0, 32'd0);
 
-        #15 reset = 0;
-
-        @(posedge clk);
-        rd = 5'd5;
-        write_data_dm = 32'hAAAA_BBBB;
-        reg_write = 1;
-        lb = 1;
-        
-        @(posedge clk);
-        lb = 0;
-        reg_write = 0;
-        
-        rs1 = 5'd5;
-        #1;
-        $display("[LB TEST] rs1_data = %h", rs1_data);
-
-        @(posedge clk);
-        rs1 = 5'd5;
-        sw = 1;
-        
-        @(posedge clk);
-        sw = 0;
-        #1;
-        $display("[SW TEST] data_out_2_dm = %h", data_out_2_dm);
-
-        @(posedge clk);
-        rd = 5'd10;
-        lui_imm_val = 32'hFFFF_0000;
-        reg_write = 1;
-        lui_control = 1;
-        
-        @(posedge clk);
-        lui_control = 0;
-        reg_write = 0;
-        
-        rs2 = 5'd10;
-        #1;
-        $display("[LUI TEST] rs2_data = %h", rs2_data);
-
-        @(posedge clk);
-        rd = 5'd15;
-        return_address = 32'h0000_1234;
-        reg_write = 1;
-        jump = 1;
-        
-        @(posedge clk);
-        jump = 0;
-        reg_write = 0;
-        
-        rs1 = 5'd15;
-        #1;
-        $display("[JUMP TEST] rs1_data = %h", rs1_data);
-
+        if (errors == 0) $display("ALL RF TESTS PASSED");
+        else             $display("%0d RF TEST(S) FAILED", errors);
         $finish;
     end
 
 endmodule
-
-

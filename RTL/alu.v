@@ -61,40 +61,19 @@ output reg [31:0] result;
                 result = src1 + imm; // add immediate
             
             6'b001100 :
-                result = imm << shift; // shift left logical immediate
+                result = src1 << imm[4:0]; // shift left logical immediate
             
             6'b001101 :
-                result = (imm< src1) ? 1 : 0;// SET LESS THAN IMMEDIATE
+                result = ($signed(src1) < $signed(imm)) ? 32'd1 : 32'd0;// SET LESS THAN IMMEDIATE
             
             6'b001110:
-                result = src1 & src2;
+                result = (src1 < imm) ? 32'd1 : 32'd0;
             
             6'b001111 :
                 result = src1 ^ imm; // xor immediate
             
             6'b010000 :
-                result = src1 >> imm; // shift right logical immediate
-            
-            6'b001001 :
-                result = (src1 < src2) ? 1 : 0;
-            
-            6'b001011 :
-                //set less than unsigned this should be checked
-                result = src1 + imm;
-            
-            6'b001101 :
-                begin
-                result = src1 | imm;
-                end
-            
-            6'b001110 :
-                result = src1 & imm;
-            
-            6'b001111 :
-                result = src1 >> imm;
-            
-            6'b010000 :
-                result = src1 << imm;
+                result = src1 >> imm[4:0]; // shift right logical immediate
             
             6'b010001 : // OR IMMEDIATE
                 result = src1 | imm;
@@ -102,22 +81,35 @@ output reg [31:0] result;
             6'b010010 :
                 result = src1 & imm;
             
-                
+            6'b010011, 6'b010100, 6'b010101, 6'b010110, 6'b010111 :
+                result = src1 + imm;
+            
+            6'b011000, 6'b011001, 6'b011010 :
+                result = src1 + imm;
+            
             6'b011011 : // BEQ: Branch if Equal
                 result = (src1 == src2) ? 32'd1 : 32'd0; 
                 
             6'b011100 : // BNE: Branch if Not Equal
                 result = (src1 != src2) ? 32'd1 : 32'd0; // Corrected comment explanation: returns 1 if different
+            
+            6'b011101 :
+                result = ($signed(src1) < $signed(src2)) ? 32'd1 : 32'd0;
+            
+            6'b011110 :
+                result = (src1 < src2) ? 32'd1 : 32'd0;
                 
             6'b011111 : // BGE: Branch if Greater than or Equal (Signed)
                 result = ($signed(src1) >= $signed(src2)) ? 32'd1 : 32'd0; // Fixed reversed operands & added signed comparison
                 
-            6'b100000 : // BLT: Branch if Less Than (Signed)
-                result = ($signed(src1) < $signed(src2)) ? 32'd1 : 32'd0;  // Added signed comparison
+            6'b100000 :
+                result = (src1 >= src2) ? 32'd1 : 32'd0;
+            
+            6'b100011 :
+                result = $signed(src1) >>> imm[4:0];
     
             default:
                 result = 32'd0;
     endcase
 end
 endmodule
-
