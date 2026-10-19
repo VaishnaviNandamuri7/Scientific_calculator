@@ -48,8 +48,8 @@ module datapath(//single cycle data path
     wire is_cordic = (opcode == 7'b111_1111);
     wire is_fpu    = (opcode == 7'b111_1110);
     wire writes_rd = (opcode == 7'b011_0011) | (opcode == 7'b001_0011) | (opcode == 7'b000_0011) |
-                     (opcode == 7'b011_0111) | (opcode == 7'b110_1111) | is_cordic | is_fpu;
-    wire reg_write = writes_rd & ~stall;//no write while cordic/fpu is working
+                     (opcode == 7'b011_0111) | (opcode == 7'b110_1111);
+    wire reg_write = writes_rd | (is_cordic & cordic_done) | (is_fpu & fpu_done);//cordic/fpu write only on done
 
     //branch taken = branch type & alu compare result
     wire BEQ  = beq_control  & alu_result[0];

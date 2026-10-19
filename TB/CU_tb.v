@@ -182,24 +182,29 @@ module CU_tb;
         cordic_busy = 0; cordic_done = 0;
         check("sin idle", 7'd0, 3'b000, OP_CORDIC, 6'b100100, F_CSTART | F_STALL);
         check("cos idle", 7'd0, 3'b001, OP_CORDIC, 6'b100101, F_CSTART | F_STALL);
-        check("exp idle", 7'd0, 3'b010, OP_CORDIC, 6'b100110, F_CSTART | F_STALL);
-        check("log idle", 7'd0, 3'b011, OP_CORDIC, 6'b100111, F_CSTART | F_STALL);
+        check("tan idle", 7'd0, 3'b010, OP_CORDIC, 6'b100110, F_CSTART | F_STALL);
+        check("exp idle", 7'd0, 3'b011, OP_CORDIC, 6'b100111, F_CSTART | F_STALL);
+        check("ln idle",  7'd0, 3'b100, OP_CORDIC, 6'b101001, F_CSTART | F_STALL);
+        check("sqrt idle", 7'd0, 3'b101, OP_CORDIC, 6'b101010, F_CSTART | F_STALL);
         check("cordic imm bits ignored", 7'h7F, 3'b000, OP_CORDIC, 6'b100100, F_CSTART | F_STALL);
 
         $display("--- CORDIC, working (busy=1 done=0) ---");
         cordic_busy = 1; cordic_done = 0;
         check("sin busy", 7'd0, 3'b000, OP_CORDIC, 6'b100100, F_STALL);
-        check("log busy", 7'd0, 3'b011, OP_CORDIC, 6'b100111, F_STALL);
+        check("exp busy", 7'd0, 3'b011, OP_CORDIC, 6'b100111, F_STALL);
+        check("ln busy",  7'd0, 3'b100, OP_CORDIC, 6'b101001, F_STALL);
+        check("sqrt busy", 7'd0, 3'b101, OP_CORDIC, 6'b101010, F_STALL);
 
         $display("--- CORDIC, result ready (done=1) ---");
         cordic_busy = 0; cordic_done = 1;
         check("sin done", 7'd0, 3'b000, OP_CORDIC, 6'b100100, F_NONE);
         cordic_busy = 1; cordic_done = 1;
         check("cos busy+done", 7'd0, 3'b001, OP_CORDIC, 6'b100101, F_NONE);
+        check("sqrt done", 7'd0, 3'b101, OP_CORDIC, 6'b101010, F_NONE);
 
         $display("--- CORDIC, illegal funct3 never stalls ---");
         cordic_busy = 0; cordic_done = 0;
-        check("cordic f3=100", 7'd0, 3'b100, OP_CORDIC, 6'b000000, F_NONE);
+        check("cordic f3=110", 7'd0, 3'b110, OP_CORDIC, 6'b000000, F_NONE);
         check("cordic f3=111", 7'd0, 3'b111, OP_CORDIC, 6'b000000, F_NONE);
 
         // ================= FPU (opcode 1111110) =================

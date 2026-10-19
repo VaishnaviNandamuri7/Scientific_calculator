@@ -46,19 +46,27 @@ module cordic_block (
     localparam signed [31:0] INV_KN1   = 32'sh0001351E; // 1/K_{-1} = ~1.207497 (Hyperbolic scaling reciprocal)
     localparam signed [31:0] CONST_ONE = 32'sh00010000; // 1.0 in Q16.16 (65536)
     localparam signed [31:0] CONST_QTR = 32'sh00004000; // 0.25 in Q16.16 (16384)
-    localparam signed [31:0] PI_HALF   = 32'sh00019220; // pi/2 = ~1.570796 rad in Q16.16
-    localparam signed [31:0] PI_CONST  = 32'sh0003243F; // pi   = ~3.141593 rad in Q16.16
+    localparam signed [63:0] PI_Q32      = 64'sh3243F6A89; // pi    in Q32 (range reduction)
+    localparam signed [63:0] LN2_Q32     = 64'shB17217F8;  // ln(2) in Q32 (range reduction)
+    localparam signed [31:0] INV_PI_Q30  = 32'sh145F306E;  // 1/pi    in Q30
+    localparam signed [31:0] INV_LN2_Q30 = 32'sh5C551D95;  // 1/ln(2) in Q30
 
     // Datapath FSM state encodings
-    localparam IDLE = 2'd0; // Idle state: waiting for enable and start command
-    localparam CALC = 2'd1; // Calculation state: actively performing rotation steps
-    localparam POST = 2'd2; // Post-processing state: final scaling, division, and output write
-    reg [1:0] state;        // Current FSM state register
+    localparam IDLE = 3'd0; // waiting for enable and start
+    localparam PRE1 = 3'd1; // pick k (trig/exp) or exponent (ln/sqrt)
+    localparam PRE2 = 3'd2; // reduced operand and seeds
+    localparam CALC = 3'd3; // 16 rotation steps
+    localparam POST = 3'd4; // scaling and output write
+    reg [2:0] state;
 
     // Internal pipeline registers
     reg [4:0]  iter;         // Iteration counter (0 to 15)
     reg [2:0]  fn3_latched;  // Latched funct3 instruction code
-    reg        negate_trig;  // Flag for trigonometric quadrant 2/3 sign inversion
+    reg        negate_trig;  // Set when k is odd (trig sign flip)
+    reg signed [31:0] opr;   // Latched operand
+    reg signed [17:0] k_reg; // k for trig/exp, exponent for ln/sqrt
+    reg               force_en;  // Output overridden (overflow, ln/sqrt of x<=0)
+    reg signed [31:0] force_val; // Value used when force_en is set
     reg signed [31:0] x;     // Datapath register X (accumulates cos, cosh, or square root norm)
     reg signed [31:0] y;     // Datapath register Y (accumulates sin, sinh, or vector residual)
     reg signed [31:0] z;     // Datapath register Z (accumulates angle or logarithm)
@@ -126,11 +134,48 @@ module cordic_block (
     // Scaling hardware multiplier for square root: x * (1/K_{-1})
     wire signed [63:0] sqrt_mult = x * INV_KN1; // Multiplies Q16.16 by Q16.16 into Q32.32
 
+    // Range reduction
+    wire is_trig = (fn3_latched <= FN3_TAN);
+    wire signed [31:0] inv_const = (fn3_latched == FN3_EXP) ? INV_LN2_Q30 : INV_PI_Q30;
+    wire signed [63:0] k_prod = opr * inv_const;                     // Q16 * Q30 = Q46
+    wire signed [63:0] k_est  = (k_prod + (64'sd1 <<< 45)) >>> 46;   // round(opr / pi) or round(opr / ln2)
+    wire signed [63:0] konst  = is_trig ? PI_Q32 : LN2_Q32;
+    wire signed [63:0] k_mul  = k_reg * konst;                       // k*pi, or k*ln2 (e*ln2 for ln), Q32
+    wire signed [63:0] opr_q32 = {{16{opr[31]}}, opr, 16'b0};
+    wire signed [63:0] r_q32  = opr_q32 - k_mul;
+    wire signed [31:0] r_q16  = (r_q32 + 64'sd32768) >>> 16;         // reduced argument, Q16.16
+
+    // Leading one of opr gives the power of two for ln and sqrt
+    reg [4:0] pe;
+    integer i;
+    always @(*) begin
+        pe = 5'd0;
+        for (i = 0; i < 31; i = i + 1)
+            if (opr[i]) pe = i;
+    end
+    wire signed [5:0] q_exp = $signed({1'b0, pe}) - 6'sd16;          // opr = m * 2^q_exp, m in [1,2)
+    wire signed [5:0] s_exp = q_exp[0] ? (q_exp + 6'sd1) : q_exp;    // even exponent for sqrt, m in [0.5,2)
+    wire [4:0] shl = 5'd0 - k_reg[4:0];                              // -k for k < 0
+    wire signed [31:0] mant = (k_reg >= 0) ? (opr >>> k_reg[4:0]) : (opr <<< shl);
+
     // Tangent calculation: Q16.16 division of sin by cos -> (sin <<< 16) / cos
     wire signed [31:0] final_y = negate_trig ? -y : y; // Corrected Sine
     wire signed [31:0] final_x = negate_trig ? -x : x; // Corrected Cosine
     wire signed [63:0] tan_numerator = {{16{final_y[31]}}, final_y, 16'd0}; // Align to Q16.16 quotient
-    wire signed [31:0] tan_result    = (final_x != 0) ? (tan_numerator / final_x) : 32'sh7FFFFFFF; // Divide sin/cos
+    wire signed [63:0] tan_q = tan_numerator / final_x;
+    wire signed [31:0] tan_result = (final_x == 0)             ? 32'sh7FFFFFFF :
+                                    (tan_q >  64'sh7FFFFFFF)   ? 32'sh7FFFFFFF :
+                                    (tan_q < -64'sh80000000)   ? 32'sh80000000 : tan_q[31:0];
+
+    // Output scaling
+    wire signed [31:0] exp_val  = x + y;                             // e^r
+    wire signed [63:0] exp_ext  = exp_val;
+    wire signed [63:0] exp_wide = (k_reg >= 0) ? (exp_ext <<< k_reg[4:0]) : (exp_ext >>> shl);
+    wire signed [31:0] exp_out  = (exp_wide > 64'sh7FFFFFFF) ? 32'sh7FFFFFFF : exp_wide[31:0];
+    wire signed [31:0] ln_off   = (k_mul + 64'sd32768) >>> 16;       // e * ln2
+    wire signed [17:0] e2       = k_reg >>> 1;                       // sqrt exponent = s/2
+    wire signed [31:0] sqrt_val = sqrt_mult[47:16];
+    wire signed [31:0] sqrt_out = (e2 >= 0) ? (sqrt_val <<< e2[4:0]) : (sqrt_val >>> (5'd0 - e2[4:0]));
 
     // Main synchronous control and datapath process
     always @(posedge clk or negedge rst_n) begin
@@ -143,6 +188,10 @@ module cordic_block (
             iter        <= 5'd0;
             fn3_latched <= 3'd0;
             negate_trig <= 1'b0;
+            opr         <= 32'sd0;
+            k_reg       <= 18'sd0;
+            force_en    <= 1'b0;
+            force_val   <= 32'sd0;
             x           <= 32'sd0;
             y           <= 32'sd0;
             z           <= 32'sd0;
@@ -150,57 +199,68 @@ module cordic_block (
             case (state)
                 IDLE: begin
                     cordic_done <= 1'b0; // Ensure done flag is deasserted in IDLE
-                    // Start execution only if block enable and start pulse are both asserted
-                    if (en && cordic_start) begin
-                        cordic_busy <= 1'b1;        // Assert busy back to CU (causes PC stall)
-                        fn3_latched <= funct3;      // Latch funct3 instruction code
-                        iter        <= 5'd0;        // Reset iteration count to 0
-                        state       <= CALC;        // Begin iterative calculations
-
-                        case (funct3)
-                            FN3_SIN, FN3_COS, FN3_TAN: begin
-                                // Range reduction: map angle to [-pi/2, +pi/2]
-                                if (operand > PI_HALF) begin
-                                    z           <= operand - PI_CONST; // Angle in Q2 -> fold by subtracting pi
-                                    negate_trig <= 1'b1;               // Negate outputs in quadrant 2
-                                end else if (operand < -PI_HALF) begin
-                                    z           <= operand + PI_CONST; // Angle in Q3 -> fold by adding pi
-                                    negate_trig <= 1'b1;               // Negate outputs in quadrant 3
-                                end else begin
-                                    z           <= operand;            // Angle already in [-pi/2, +pi/2]
-                                    negate_trig <= 1'b0;               // No sign correction needed
-                                end
-                                x <= INV_K1;    // Seed x with 1/K1 to pre-compensate circular gain
-                                y <= 32'sd0;    // Seed y with 0.0
-                            end
-
-                            FN3_EXP: begin
-                                negate_trig <= 1'b0;
-                                x           <= INV_KN1;  // Seed x with 1/K_{-1} hyperbolic gain reciprocal
-                                y           <= 32'sd0;  // Seed y with 0.0
-                                z           <= operand;  // Seed z with target power 'a'
-                            end
-
-                            FN3_LN: begin
-                                negate_trig <= 1'b0;
-                                x           <= operand + CONST_ONE; // Seed x_0 = x + 1.0
-                                y           <= operand - CONST_ONE; // Seed y_0 = x - 1.0
-                                z           <= 32'sd0;             // Accumulator starts at 0.0
-                            end
-
-                            FN3_SQRT: begin
-                                negate_trig <= 1'b0;
-                                x           <= operand + CONST_QTR; // Seed x_0 = x + 0.25
-                                y           <= operand - CONST_QTR; // Seed y_0 = x - 0.25
-                                z           <= 32'sd0;             // Seed z_0 = 0.0
-                            end
-
-                            default: begin
-                                state       <= IDLE; // Unknown funct3 returns to IDLE
-                                cordic_busy <= 1'b0;
-                            end
-                        endcase
+                    // Start only if enabled, start pulse asserted and funct3 is valid
+                    if (en && cordic_start && funct3 <= FN3_SQRT) begin
+                        cordic_busy <= 1'b1;   // Assert busy back to CU (causes PC stall)
+                        fn3_latched <= funct3; // Latch funct3 instruction code
+                        opr         <= operand;
+                        iter        <= 5'd0;
+                        force_en    <= 1'b0;
+                        state       <= PRE1;
                     end
+                end
+
+                PRE1: begin
+                    case (fn3_latched)
+                        FN3_LN:   k_reg <= q_exp;
+                        FN3_SQRT: k_reg <= s_exp;
+                        default:  k_reg <= k_est[17:0]; // trig and exp
+                    endcase
+                    state <= PRE2;
+                end
+
+                PRE2: begin
+                    state <= CALC;
+                    case (fn3_latched)
+                        FN3_SIN, FN3_COS, FN3_TAN: begin
+                            z           <= r_q16;    // angle in [-pi/2, +pi/2]
+                            negate_trig <= k_reg[0]; // odd k flips sin and cos
+                            x           <= INV_K1;   // Seed x with 1/K1 to pre-compensate circular gain
+                            y           <= 32'sd0;
+                        end
+
+                        FN3_EXP: begin
+                            negate_trig <= 1'b0;
+                            z           <= r_q16;    // |r| <= ln2/2
+                            x           <= INV_KN1;  // Seed x with 1/K_{-1} hyperbolic gain reciprocal
+                            y           <= 32'sd0;
+                            if (k_reg > 18'sd15) begin           // result >= 32768, saturate
+                                force_en <= 1'b1; force_val <= 32'sh7FFFFFFF;
+                            end else if (k_reg < -18'sd16) begin // result < 2^-16, underflow
+                                force_en <= 1'b1; force_val <= 32'sd0;
+                            end
+                        end
+
+                        FN3_LN: begin
+                            negate_trig <= 1'b0;
+                            x           <= mant + CONST_ONE; // Seed x_0 = m + 1.0
+                            y           <= mant - CONST_ONE; // Seed y_0 = m - 1.0
+                            z           <= 32'sd0;
+                            if (opr <= 0) begin                  // ln(x<=0) -> most negative value
+                                force_en <= 1'b1; force_val <= 32'sh80000000;
+                            end
+                        end
+
+                        FN3_SQRT: begin
+                            negate_trig <= 1'b0;
+                            x           <= mant + CONST_QTR; // Seed x_0 = m + 0.25
+                            y           <= mant - CONST_QTR; // Seed y_0 = m - 0.25
+                            z           <= 32'sd0;
+                            if (opr <= 0) begin                  // sqrt(x<=0) -> 0
+                                force_en <= 1'b1; force_val <= 32'sd0;
+                            end
+                        end
+                    endcase
                 end
 
                 CALC: begin
@@ -242,16 +302,18 @@ module cordic_block (
                     cordic_done <= 1'b1; // Pulse done flag to signal writeback readiness
                     state       <= IDLE; // Return to IDLE to await next command
 
-                    // Select output based on latched funct3
-                    case (fn3_latched)
-                        FN3_SIN:  cordic_out <= final_y;             // Output sin(theta)
-                        FN3_COS:  cordic_out <= final_x;             // Output cos(theta)
-                        FN3_TAN:  cordic_out <= tan_result;          // Output tan(theta) = sin / cos
-                        FN3_EXP:  cordic_out <= x + y;               // Output e^x = cosh(x) + sinh(x)
-                        FN3_LN:   cordic_out <= z <<< 1;             // Output ln(x) = 2 * z
-                        FN3_SQRT: cordic_out <= sqrt_mult[47:16];    // Output sqrt(x) = x * (1/K_{-1})
-                        default:  cordic_out <= 32'sd0;
-                    endcase
+                    if (force_en)
+                        cordic_out <= force_val;
+                    else
+                        case (fn3_latched)
+                            FN3_SIN:  cordic_out <= final_y;             // Output sin(theta)
+                            FN3_COS:  cordic_out <= final_x;             // Output cos(theta)
+                            FN3_TAN:  cordic_out <= tan_result;          // Output tan(theta) = sin / cos
+                            FN3_EXP:  cordic_out <= exp_out;             // Output e^r * 2^k
+                            FN3_LN:   cordic_out <= (z <<< 1) + ln_off;  // Output ln(m) + e*ln2
+                            FN3_SQRT: cordic_out <= sqrt_out;            // Output sqrt(m) * 2^(s/2)
+                            default:  cordic_out <= 32'sd0;
+                        endcase
                 end
             endcase
         end

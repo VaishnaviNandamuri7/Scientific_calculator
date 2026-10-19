@@ -279,13 +279,15 @@ module CU(//control unit
                       
                        else if(opcode == 7'b111_1111)
                             begin
-                                case(funct3)
+                                case(funct3)//same numbering as cordic_block
                                     3'b000 : alu_control = 6'b100100; // sin
                                     3'b001 : alu_control = 6'b100101; // cos
-                                    3'b010 : alu_control = 6'b100110; // exp
-                                    3'b011 : alu_control = 6'b100111; // log
+                                    3'b010 : alu_control = 6'b100110; // tan
+                                    3'b011 : alu_control = 6'b100111; // exp
+                                    3'b100 : alu_control = 6'b101001; // ln
+                                    3'b101 : alu_control = 6'b101010; // sqrt
                                 endcase
-                                if(funct3 <= 3'b011)
+                                if(funct3 <= 3'b101)
                                 begin
                                     stall = ~cordic_done;// hold the PC until the result is ready
                                     cordic_start = ~cordic_busy & ~cordic_done;// start only when idle

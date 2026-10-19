@@ -70,6 +70,10 @@ module FPU (
                     count <= 0;
                     busy <= 1'b1;
                 end
+                else begin//invalid op, finish at once so the cpu never hangs
+                    result <= 32'h7FC00000;//quiet NaN
+                    done <= 1'b1;
+                end
             end
             else if (busy) begin
                 if (count < 2)
@@ -269,9 +273,9 @@ module FPU (
                 quotient = numerator / my;
                 exp_result = ex - ey + 127;
 
-                if (quotient[26]) begin
-                    quotient = quotient >> 1;
-                    exp_result = exp_result + 1;
+                if (!quotient[26]) begin//mx < my, normalize up
+                    quotient = quotient << 1;
+                    exp_result = exp_result - 1;
                 end
 
                 if (exp_result >= 255)
@@ -315,7 +319,3 @@ module FPU (
     endfunction
 
 endmodule
-
-
-
-
