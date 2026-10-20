@@ -1,59 +1,69 @@
-// addr 0x00: addi x1, x0, 5      -> 0x00500093
+// addr 0x00: addi x1, x0, 5     -> 0x00500093
 93
 00
 50
 00
-// addr 0x04: addi x2, x0, 10     -> 0x00A00113
+// addr 0x04: addi x2, x0, 0     -> 0x00000113
 13
 01
-A0
 00
-// addr 0x08: add x3, x1, x2      -> 0x002081B3
-B3
-81
-20
 00
-// addr 0x0C: sub x4, x2, x1      -> 0x40110233
+// addr 0x08: add  x2, x2, x1    -> 0x00110133
 33
-02
+01
 11
-40
-// addr 0x10: and x5, x1, x2      -> 0x0020F2B3
-B3
-F2
-20
 00
-// addr 0x14: or x6, x1, x2       -> 0x0020E333
-33
-E3
-20
-00
-// addr 0x18: sw x3, 0(x0)        -> 0x00302023
-23
-20
-30
-00
-// addr 0x1C: lw x7, 0(x0)        -> 0x00002383
-83
-23
-00
-00
-// addr 0x20: beq x3, x7, +8      -> 0x00718463
-63
-84
-71
-00
-// addr 0x24: addi x8, x0, 1      -> 0x00100413 (skipped by the beq)
-13
-04
-10
-00
-// addr 0x28: addi x9, x0, 99     -> 0x06300493
+// addr 0x0C: addi x1, x1, -1    -> 0xFFF08093
 93
-04
-30
-06
-// addr 0x2C: jal x0, 0           -> 0x0000006F (loops forever here)
+80
+F0
+FF
+// addr 0x10: bne  x1, x0, -8    -> 0xFE009CE3
+E3
+9C
+00
+FE
+// addr 0x14: sw   x2, 0(x0)     -> 0x00202023
+23
+20
+20
+00
+// addr 0x18: lui  x3, 0x3FC00   -> 0x3FC001B7
+B7
+01
+C0
+3F
+// addr 0x1C: lui  x4, 0x40000   -> 0x40000237
+37
+02
+00
+40
+// addr 0x20: fmul x5, x3, x4    -> 0x104182FE
+FE
+82
+41
+10
+// addr 0x24: sw   x5, 4(x0)     -> 0x00502223
+23
+22
+50
+00
+// addr 0x28: lui  x6, 0x00010   -> 0x00010337
+37
+03
+01
+00
+// addr 0x2C: csin x7, x6        -> 0x000303FF
+FF
+03
+03
+00
+// addr 0x30: sw   x7, 8(x0)     -> 0x00702423
+23
+24
+70
+00
+// addr 0x34: jal  x0, 0         -> 0x0000006F
 6F
 00
 00
