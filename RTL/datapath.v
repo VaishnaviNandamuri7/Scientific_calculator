@@ -22,7 +22,15 @@
 
 module datapath(//single cycle data path
     input clock,
-    input reset
+    input reset,
+    //board loader ports (Top_RISC ties them off for simulation)
+    input imem_we,                 //write one program byte
+    input [6:0] imem_addr,
+    input [7:0] imem_data,
+    input dmem_clear,              //zero the data memory
+    input [5:0] dmem_dump_addr,    //read a data memory word
+    output [31:0] dmem_dump_data,
+    output [31:0] current_instruction//lets the board spot the halt (jal x0, 0)
     );
     //fetch
     wire [31:0] PC, curr_PC, instruction;
@@ -43,6 +51,8 @@ module datapath(//single cycle data path
     wire [31:0] cordic_out, fpu_result;
     wire cordic_busy, cordic_done, fpu_busy, fpu_done;
     reg  [31:0] write_data;
+
+    assign current_instruction = instruction;
 
     //opcode flags
     wire is_cordic = (opcode == 7'b111_1111);
@@ -77,6 +87,7 @@ module datapath(//single cycle data path
 
     IMU #(.PROGRAM_FILE("program.hex")) imu(//instruction memory unit
         .clk(clock), .PC(PC), .reset(reset),
+        .load_we(imem_we), .load_addr(imem_addr), .load_data(imem_data),
         .instruction(instruction)
     );
 
@@ -114,7 +125,8 @@ module datapath(//single cycle data path
 
     data_memory dm(
         .clk(clock), .mem_addr(alu_result), .write_data(rs2_data),
-        .sw(sw), .funct3(funct3), .read_data(mem_data)
+        .sw(sw), .funct3(funct3), .read_data(mem_data),
+        .clear(dmem_clear), .dump_addr(dmem_dump_addr), .dump_data(dmem_dump_data)
     );
 
     cordic_block cordic(

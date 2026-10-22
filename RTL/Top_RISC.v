@@ -24,5 +24,10 @@ module Top_RISC(
 input clock,
 input reset
     );
-    datapath dp(.clock(clock), .reset(reset));
+    // simulation top: the program comes from $readmemh, so the board loader ports are tied off
+    // (the board uses Board_Top instead)
+    datapath dp(.clock(clock), .reset(reset),
+        .imem_we(1'b0), .imem_addr(7'd0), .imem_data(8'd0),
+        .dmem_clear(1'b0), .dmem_dump_addr(6'd0), .dmem_dump_data(),
+        .current_instruction());
 endmodule

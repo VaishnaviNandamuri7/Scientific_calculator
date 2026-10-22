@@ -26,7 +26,10 @@ module data_memory(
     input [31:0] write_data,     // Data to store (from register memory)
     input sw,                    // Store control (high for sb, sh and sw)
     input [2:0] funct3,          // Access size and sign: [1:0] = size, [2] = unsigned load
-    output reg [31:0] read_data  // Output data back to register memory
+    output reg [31:0] read_data, // Output data back to register memory
+    input clear,                 // Board loader: set all 64 words to 0 (Top_RISC ties it to 0)
+    input [5:0] dump_addr,       // Board loader: second read port, word index 0..63
+    output [31:0] dump_data      // Board loader: word sent back over UART
 );
 
     // RAM array: 64 words of 32-bit memory
@@ -48,9 +51,16 @@ module data_memory(
         for (i = 0; i < 64; i = i + 1) ram[i] = 32'd0;
     end
 
+    // Second read port, only used by the board loader to send the results back
+    assign dump_data = ram[dump_addr];
+
     // --- Synchronous Write Block ---
     always @(posedge clk) begin
-        if (sw) begin
+        if (clear) begin
+            // Board loader: start every run from zeros, like a fresh simulation
+            for (i = 0; i < 64; i = i + 1) ram[i] <= 32'd0;
+        end
+        else if (sw) begin
             if (funct3[1:0] == 2'b00) begin
                 // Store byte: only the selected byte changes, other 3 stay as they are
                 if (byte_offset == 2'b00)      ram[word_addr][7:0]   <= write_data[7:0];
