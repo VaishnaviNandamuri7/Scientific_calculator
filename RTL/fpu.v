@@ -129,6 +129,7 @@ module FPU (
         reg [23:0] mx, my, mant;
         reg [24:0] sum;
         integer diff;
+        integer i;
 
         begin
             sx = x[31];
@@ -181,9 +182,13 @@ module FPU (
                         er = 0;
                     end
                     else begin
-                        while (!mant[23] && er > 1) begin
-                            mant = mant << 1;
-                            er = er - 1'b1;
+                        // fixed-count loop (hardware needs a fixed bound): shift left
+                        // until the top bit is 1 or the exponent reaches 1
+                        for (i = 0; i < 24; i = i + 1) begin
+                            if (!mant[23] && er > 1) begin
+                                mant = mant << 1;
+                                er = er - 1'b1;
+                            end
                         end
                     end
                 end
