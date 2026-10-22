@@ -20,6 +20,7 @@
 module Top_RISC_tb;
     localparam integer MAX_CYCLES = 100000;       // timeout guard
     localparam [31:0]  HALT       = 32'h0000006F; // jal x0, 0
+    localparam         RUN_SELF_CHECK = 0;           // 1 = run the exercise-program checks at the bottom
 
     reg clock = 0, reset = 1;
     integer cycles = 0;
@@ -104,9 +105,9 @@ module Top_RISC_tb;
 
         // =====================================================================
         // EDIT PER PROGRAM: expected results for the exercise program
-        // (delete or replace this block when you change program.hex)
+        // Only runs when RUN_SELF_CHECK = 1 (calc.py programs need it at 0)
         // =====================================================================
-        if (halted) begin
+        if (RUN_SELF_CHECK && halted) begin
             $display("---- self-check ----");
             check_reg(2, 32'd15);                  // 5+4+3+2+1
             check_reg(5, 32'h40400000);            // 1.5f * 2.0f = 3.0f
