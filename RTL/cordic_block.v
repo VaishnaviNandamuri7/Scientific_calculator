@@ -159,8 +159,8 @@ module cordic_block (
     wire signed [31:0] mant = (k_reg >= 0) ? (opr >>> k_reg[4:0]) : (opr <<< shl);
 
     // Tangent calculation: Q16.16 division of sin by cos -> (sin <<< 16) / cos
-    wire signed [31:0] final_y = negate_trig ? -y : y; // Corrected Sine
-    wire signed [31:0] final_x = negate_trig ? -x : x; // Corrected Cosine
+    wire signed [31:0] final_y = negate_trig ? -y : y; // Sine
+    wire signed [31:0] final_x = negate_trig ? -x : x; // Cosine
     wire signed [63:0] tan_numerator = {{16{final_y[31]}}, final_y, 16'd0}; // Align to Q16.16 quotient
     wire signed [63:0] tan_q = tan_numerator / final_x;
     wire signed [31:0] tan_result = (final_x == 0)             ? 32'sh7FFFFFFF :
