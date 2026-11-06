@@ -182,7 +182,7 @@ module FPU (
                         er = 0;
                     end
                     else begin
-                        // fixed-count loop (hardware needs a fixed bound): shift left
+                        //shift left
                         // until the top bit is 1 or the exponent reaches 1
                         for (i = 0; i < 24; i = i + 1) begin
                             if (!mant[23] && er > 1) begin
