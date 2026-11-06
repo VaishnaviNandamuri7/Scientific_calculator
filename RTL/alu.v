@@ -91,7 +91,7 @@ output reg [31:0] result;
                 result = (src1 == src2) ? 32'd1 : 32'd0; 
                 
             6'b011100 : // BNE: Branch if Not Equal
-                result = (src1 != src2) ? 32'd1 : 32'd0; // Corrected comment explanation: returns 1 if different
+                result = (src1 != src2) ? 32'd1 : 32'd0; // returns 1 if different
             
             6'b011101 :
                 result = ($signed(src1) < $signed(src2)) ? 32'd1 : 32'd0;
@@ -100,7 +100,7 @@ output reg [31:0] result;
                 result = (src1 < src2) ? 32'd1 : 32'd0;
                 
             6'b011111 : // BGE: Branch if Greater than or Equal (Signed)
-                result = ($signed(src1) >= $signed(src2)) ? 32'd1 : 32'd0; // Fixed reversed operands & added signed comparison
+                result = ($signed(src1) >= $signed(src2)) ? 32'd1 : 32'd0; // reversed operands & added signed comparison
                 
             6'b100000 :
                 result = (src1 >= src2) ? 32'd1 : 32'd0;
